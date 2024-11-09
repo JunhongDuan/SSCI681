@@ -1,0 +1,48 @@
+---
+title: "MODIS_modisfast"
+author: "Junhong Duan"
+date: "2024-11-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("modisfast")
+library(modisfast)
+library(sf)
+library(terra)
+
+# ROI and time range of interest
+roi <- st_as_sf(data.frame(id = "los_angeles", geom = "POLYGON((-118.6682 33.7036, -118.1553 33.7036, -118.1553 34.3373, -118.6682 34.3373, -118.6682 33.7036))"), wkt = "geom", crs = 4326) # 洛杉矶的ROI，格式为sf多边形
+time_range <- as.Date(c("2023-01-01", "2023-01-01")) # 设置感兴趣的时间范围
+
+log <- mf_login(credentials = c("mardy_duan", "1998tingtingDJH!")) # set your own EOSDIS username and password
+
+# MODIS collections and variables (bands) of interest
+collection <- "MYD11A1.061" # run mf_list_collections() for an exhaustive list of collections available
+variables <- c("LST_Day_1km", "LST_Night_1km")
+
+# Get the URLs of the data
+urls <- mf_get_url(
+  collection = collection,
+  variables = variables,
+  roi = roi,
+  time_range = time_range
+)
+
+## Download the data. By default the data is downloaded in a temporary directory, but you can specify a folder
+res_dl <- mf_download_data(urls, parallel = TRUE)
+
+r <- mf_import_data(
+  path = dirname(res_dl$destfile[1]),
+  collection = collection,
+  proj_epsg = 4326
+)
+terra::plot(r[[1]], col = rev(terrain.colors(20)), main = "Daytime LST")
+terra::plot(r[[2]], col = rev(terrain.colors(20)), main = "Nighttime LST")
+
+names(r)
+```
