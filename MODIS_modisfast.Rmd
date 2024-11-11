@@ -11,19 +11,38 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 install.packages("modisfast")
+install.packages("ncdf4")
+install.packages("viridis")
 library(modisfast)
 library(sf)
 library(terra)
+library(ggplot2)
+library(ncdf4)
+library(viridisLite)
+library(viridis)
+
 
 # ROI and time range of interest
-roi <- st_as_sf(data.frame(id = "los_angeles", geom = "POLYGON((-118.6682 33.7036, -118.1553 33.7036, -118.1553 34.3373, -118.6682 34.3373, -118.6682 33.7036))"), wkt = "geom", crs = 4326) # 洛杉矶的ROI，格式为sf多边形
-time_range <- as.Date(c("2023-01-01", "2023-01-01")) # 设置感兴趣的时间范围
+# roi <- st_as_sf(data.frame(id = "los_angeles", geom = "POLYGON((-118.6682 33.7036, -118.1553 33.7036, -118.1553 34.3373, -118.6682 34.3373, -118.6682 33.7036))"), wkt = "geom", crs = 4326) 
+roi <- st_read("./Data/Los_Angeles_City_shapefile_2018/Los_Angeles_City_shapefile_2018.shp", crs = 4326)
+ggplot(data = roi) +
+  geom_sf() +
+  ggtitle("Los Angeles City Shapefile") +
+  xlab("Longitude") +
+  ylab("Latitude")
+
+roi <- roi %>%
+  dplyr::mutate(id = "los_angeles") %>%
+  dplyr::select(id, geometry = geometry)
+
+time_range <- as.Date(c("2023-01-01", "2023-01-31"))
 
 log <- mf_login(credentials = c("mardy_duan", "1998tingtingDJH!")) # set your own EOSDIS username and password
 
 # MODIS collections and variables (bands) of interest
 collection <- "MYD11A1.061" # run mf_list_collections() for an exhaustive list of collections available
-variables <- c("LST_Day_1km", "LST_Night_1km")
+mf_list_variables("MYD11A1.061")
+variables <- c("LST_Day_1km", "Day_view_time", "LST_Night_1km","Night_view_time")
 
 # Get the URLs of the data
 urls <- mf_get_url(
@@ -34,7 +53,37 @@ urls <- mf_get_url(
 )
 
 ## Download the data. By default the data is downloaded in a temporary directory, but you can specify a folder
-res_dl <- mf_download_data(urls, parallel = TRUE)
+download_path = "./Data/MODIS/MODISfast_LAcity"
+res_dl <- mf_download_data(urls, path = download_path,parallel = TRUE)
+
+nc4_file <- list.files("./Data/MODIS/MODISfast_LAcity/Data/los_angeles/MYD11A1.061", pattern = "\\.nc4$", full.names = TRUE)[1]
+modis_raster <- rast(nc4_file)
+crs(modis_raster) <- "+proj=sinu +R=6371007.181 +nadgrids=@null +wktext"
+modis_raster <- project(modis_raster, "EPSG:4326", method = "bilinear")
+nc <- nc_open(nc4_file)
+print(nc)
+nc_close(nc)
+
+print(modis_raster)
+
+modis_raster <- crop(modis_raster, roi)
+modis_raster <- mask(modis_raster, roi)
+# need to define the data for each day
+plot(modis_raster[[1]], main = "2022-01-09 Daytime Temperature") # 1+31
+plot(modis_raster[[]], main = "2023-01-09 Nighttime Temperature")
+
+layer_df <- as.data.frame(modis_raster[["LST_Night_1km_5"]], xy = TRUE, na.rm = TRUE)
+ggplot(layer_df, aes(x = x, y = y, fill = LST_Night_1km_5)) +
+  geom_raster() +
+  scale_fill_viridis_c(name = "Temperature (K)", limits = c(260, 300)) +
+  labs(title = "2023-01-04 Nighttime Temperature (LST_Night_1km_5)", x = "Longitude", y = "Latitude") +
+  theme_minimal()
+
+modis_raster$LST_Day_1km_6
+
+# 绘制第一个波段数据 (例如，"LST_Day_1km")
+# 如果 res_data 是多层栅格数据，可以选择要绘制的波段
+plot(res_data[[1]], main = "MODIS LST Day 1km for Los Angeles")
 
 r <- mf_import_data(
   path = dirname(res_dl$destfile[1]),
