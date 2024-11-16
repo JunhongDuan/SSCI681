@@ -164,6 +164,7 @@ for (year in years) {
 combined_data <- bind_rows(all_years_data)
 la_age_data <- combined_data %>%
   filter(GEOID %in% la_city_tracts$GEOID)
+
 age_summary <- la_age_data %>%
   group_by(year) %>%
   summarise(
