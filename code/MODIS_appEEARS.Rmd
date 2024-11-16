@@ -1,0 +1,104 @@
+---
+title: "MODIS_appEEARS"
+author: "Junhong Duan"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("sf")
+install.packages("remotes")
+install.packages("ncdf4")
+
+library(sf)
+remotes::install_github("cran/rgdal")
+library(ncdf4) # package for netcdf manipulation
+library(raster) # package for raster manipulation
+library(ggplot2) # package for plotting
+```
+
+```{r}
+# data download: https://appeears.earthdatacloud.nasa.gov/task/area
+nc_data <- nc_open('../Data/MODIS/MODIS_appEEARS/MOD11A1.061_1km_aid0001.nc')
+time <- ncvar_get(nc_data, "time")
+nc_close(nc_data)
+
+start_date <- as.Date("2000-01-01")
+time_dates <- start_date + time - 1
+
+target_date <- as.Date("2010-01-05")
+target_index <- which(time_dates == target_date)
+
+nc_data <- nc_open('../Data/MODIS/MODIS_appEEARS/MOD11A1.061_1km_aid0001.nc')
+
+# Extract the LST Day and Night data for the target index
+LST_day <- ncvar_get(nc_data, "LST_Day_1km")[,,target_index]
+LST_night <- ncvar_get(nc_data, "LST_Night_1km")[,,target_index]
+
+# Close the file
+nc_close(nc_data)
+
+# Print the extracted LST data for the target date
+#print(LST_day)
+#print(LST_night)
+
+LST_day_raster <- raster(t(LST_day), xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), crs=CRS("+proj=longlat +datum=WGS84"))
+LST_night_raster <- raster(t(LST_night), xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), crs=CRS("+proj=longlat +datum=WGS84"))
+
+# Plot Daytime and Nighttime LST
+par(mfrow=c(1,2))  # Set up for two plots side by side
+plot(LST_day_raster, main="Daytime LST on 2010-01-05")
+plot(LST_night_raster, main="Nighttime LST on 2010-01-05")
+
+```
+
+
+```{r}
+# 20100101 - 20100131 - daytime temperature
+# Open the NetCDF file
+nc_data <- nc_open('../Data/MODIS/MODIS_appEEARS/MOD11A1.061_1km_aid0001.nc')
+
+# Extract the time values
+time <- ncvar_get(nc_data, "time")
+
+# Convert time to dates
+start_date <- as.Date("2000-01-01")
+time_dates <- start_date + time - 1
+
+# Define the target date range (2010-01-01 to 2010-01-30)
+target_start_date <- as.Date("2010-01-01")
+target_end_date <- as.Date("2010-01-30")
+
+# Find the indices for the target date range
+target_indices <- which(time_dates >= target_start_date & time_dates <= target_end_date)
+
+# Open a PNG file with larger dimensions
+png("../Data/MODIS/MODIS_appEEARS/LST_daytime_maps_large.png", width=1800, height=1800, res=150)  # Larger resolution and size
+
+# Initialize plotting area for 30 subplots (5 rows, 6 columns)
+par(mfrow=c(5, 6), mar=c(4, 4, 3, 1), oma=c(0, 0, 2, 0))  # Adjusting margins and spacing
+
+# Loop through each target date to extract LST and plot
+for (i in target_indices) {
+  
+  # Extract the LST Day data for the current date
+  LST_day <- ncvar_get(nc_data, "LST_Day_1km")[,,i]
+  
+  # Convert the LST data to a raster object
+  LST_day_raster <- raster(t(LST_day), xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), crs=CRS("+proj=longlat +datum=WGS84"))
+  
+  # Plot the daytime LST for the current date
+  plot(LST_day_raster, main=paste("Daytime LST on", time_dates[i]), col=terrain.colors(100))
+}
+
+# Close the NetCDF file
+nc_close(nc_data)
+
+# Close the PNG device (this saves the image)
+dev.off()
+
+```
