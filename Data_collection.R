@@ -82,4 +82,16 @@ crime_tract_ag <- crime_tract %>%
   mutate(crime_rate= 1000*n/estimate) %>% # crime rate
   st_as_sf()
 
-# ------ HEAT DATA TABLES ------ #
+# aggregated by type
+crime_tract_ag_type <- crime_tract %>%
+  st_drop_geometry() %>%
+  #group_by(year, offense_against, offense_group, offense_type, GEOID) %>%
+  group_by(offense_type, offense_group, offense_against, GEOID) %>%
+  summarise(n = n()) %>%
+  merge(la_tracts, by="GEOID") %>%
+  filter(estimate > 1) %>% # population per tract must be greater than 10
+  mutate(crime_rate= 1000*n/estimate) %>% # crime rate
+  st_as_sf()
+
+
+
