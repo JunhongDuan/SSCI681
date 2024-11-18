@@ -1,0 +1,467 @@
+---
+title: "DemographicData"
+author: "Junhong Duan"
+date: "2024-11-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("tidycensus")
+remotes::install_github("mikejohnson51/climateR")
+
+```
+
+```{r}
+library(tidycensus)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(sf)
+
+LAcity_shapefile <- st_read("../Data/Los_Angeles_City_shapefile_2018.shp")
+#str(LAcity_shapefile)
+CA_census_tract_shp <- st_read('../Data/CA_census tract_2018_boundary_shapefile/tl_2018_06_tract/tl_2018_06_tract.shp')
+#str(CA_census_tract_shp)
+CA_census_tract_shp$GEOID_numeric <- as.numeric(CA_census_tract_shp$GEOID)
+#head(CA_census_tract_shp$GEOID_numeric)
+if (st_crs(CA_census_tract_shp) != st_crs(LAcity_shapefile)) {
+  LAcity_shapefile <- st_transform(LAcity_shapefile, st_crs(CA_census_tract_shp))
+}
+LA_census_tracts <- st_intersection(CA_census_tract_shp, LAcity_shapefile)
+# print(LA_census_tracts)
+plot(st_geometry(LA_census_tracts))
+```
+
+```{r}
+# 59c822f1e8302f7e57bbdd6d0cf1fd7649de1f0e
+# census_api_key("59c822f1e8302f7e57bbdd6d0cf1fd7649de1f0e", install = TRUE)
+
+base_variables <- c(
+  "S0101_C01_001E", "S0101_C02_001E", "S0101_C03_001E",
+  "S0101_C01_002E", "S0101_C01_003E", "S0101_C01_004E",
+  "S0101_C01_005E", "S0101_C01_006E", "S0101_C01_007E",
+  "S0101_C01_008E", "S0101_C01_009E", "S0101_C01_010E",
+  "S0101_C01_011E", "S0101_C01_012E", "S0101_C01_013E",
+  "S0101_C01_014E", "S0101_C01_015E", "S0101_C01_016E",
+  "S0101_C01_017E", "S0101_C01_018E", "S0101_C01_019E"
+)
+
+extra_variable <- "S0101_C05_001E"
+
+for (year in 2010:2019) {
+  S0101_variables <- if (year <= 2016) {
+    base_variables
+  } else {
+    c(base_variables, extra_variable)  # 添加额外变量
+  }
+  
+  S0101_table <- get_acs(
+    geography = "tract",
+    variables = S0101_variables,
+    year = year,
+    state = "CA",
+    county = "Los Angeles",
+    survey = "acs5",
+    output = "wide"
+  )
+  
+  data_clean <- S0101_table %>%
+    mutate(
+      year = year,
+      population = S0101_C01_001E,
+      male = ifelse(
+       year >= 2010 & year <= 2016, 
+        S0101_C02_001E, S0101_C03_001E
+      ),
+      female = ifelse(
+       year >= 2010 & year <= 2016, 
+        S0101_C03_001E, S0101_C05_001E
+      ),
+      age_0_19 = ifelse(
+        year >= 2010 & year <= 2016, 
+        (S0101_C01_002E + S0101_C01_003E + S0101_C01_004E + S0101_C01_005E) / 100 * population, 
+        S0101_C01_002E + S0101_C01_003E + S0101_C01_004E + S0101_C01_005E
+      ),
+      age_20_29 = ifelse(
+        year >= 2010 & year <= 2016, 
+        (S0101_C01_006E + S0101_C01_007E) / 100 * population, 
+        S0101_C01_006E + S0101_C01_007E
+      ),
+      age_30_39 = ifelse(
+        year >= 2010 & year <= 2016, 
+        (S0101_C01_008E + S0101_C01_009E) / 100 * population, 
+        S0101_C01_008E + S0101_C01_009E
+      ),
+      age_40_49 = ifelse(
+        year >= 2010 & year <= 2016, 
+        (S0101_C01_010E + S0101_C01_011E) / 100 * population, 
+        S0101_C01_010E + S0101_C01_011E
+      ),
+      age_50_59 = ifelse(
+        year >= 2010 & year <= 2016, 
+        (S0101_C01_012E + S0101_C01_013E) / 100 * population, 
+        S0101_C01_012E + S0101_C01_013E
+      ),
+      age_60_69 = ifelse(
+        year >= 2010 & year <= 2016, 
+        (S0101_C01_014E + S0101_C01_015E) / 100 * population, 
+        S0101_C01_014E + S0101_C01_015E
+      ),
+      age_70_plus = ifelse(
+        year >= 2010 & year <= 2016, 
+        (S0101_C01_016E + S0101_C01_017E + S0101_C01_018E + S0101_C01_019E) / 100 * population, 
+        S0101_C01_016E + S0101_C01_017E + S0101_C01_018E + S0101_C01_019E
+      )
+    ) %>%
+    select(GEOID, NAME, year, population, male, female, age_0_19, age_20_29, 
+           age_30_39, age_40_49, age_50_59, age_60_69, age_70_plus)
+  
+  output_file <- paste0("../Data/Demographic_Nov16/S0101_convertedByGroups/LA_Census_Tract_Data_", year, ".csv")
+  write.csv(data_clean, output_file, row.names = FALSE)
+  
+  # 打印状态信息
+  message("Saved data for year: ", year)
+}
+
+```
+
+
+```{r}
+years <- 2010:2019
+all_data <- list()
+
+for (year in years) {
+  file_name <- paste0("../Data/Demographic_Nov16/S0101_convertedByGroups/LA_Census_Tract_Data_", year, ".csv")
+  yearly_data <- read.csv(file_name)
+  yearly_data <- left_join(LA_census_tracts, yearly_data, by = c("GEOID_numeric" = "GEOID"))
+  yearly_data <- yearly_data %>%
+    mutate(male_ratio = male/population) %>%
+    select(GEOID, year, male_ratio)  # 只保留需要的列
+  all_data[[as.character(year)]] <- yearly_data
+ 
+  map <- ggplot(data = yearly_data) +
+    geom_sf(aes(fill = male_ratio), color = NA) +  # 使用男性比例填充
+    scale_fill_viridis_c(
+      name = "Male Ratio",
+      na.value = "grey50",
+      limits = c(0, 1)  # 固定颜色范围为 0-1
+    ) +
+    labs(
+      title = paste("Male Ratio in Los Angeles City Census Tracts (", year, ")", sep = ""),
+      caption = "Data Source: ACS 5-year estimates"
+    ) +
+    theme_minimal()
+  plot(map)
+  ggsave(
+    filename = paste0("../Data/Demographic_Nov16/img/LA_Census_Tracts_Male_Ratio_", year, ".png"),
+    plot = map,
+    width = 8,
+    height = 6
+ )
+ cat("Map for year", year, "saved as LA_Census_Tracts_Male_Ratio_", year, ".png\n", sep = "")
+  
+}
+combined_data <- bind_rows(all_data)
+
+yearly_avg <- combined_data %>%
+  st_drop_geometry() %>%
+  group_by(year) %>%
+  summarize(avg_sex_ratio = mean(male_ratio, na.rm = TRUE))
+
+tract_lines <- ggplot() +
+  geom_line(data = combined_data, aes(x = year, y = male_ratio, group = GEOID), 
+            alpha = 0.1, color = "blue") +
+  geom_line(data = yearly_avg, aes(x = year, y = avg_sex_ratio), 
+            color = "red", linewidth = 1, linetype = "dashed") +
+  labs(
+    title = "Sex Ratio Trends for Census Tracts in Los Angeles County (2010-2019)",
+    x = "Year",
+    y = "Male Ratio (Male / population)"
+  ) +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(
+    breaks = 2010:2019,  
+    labels = 2010:2019  
+  ) +
+  theme_minimal()
+print(tract_lines)
+
+write.csv(combined_data, "../Data/Demographic_Nov16/S0101_convertedByGroups/combined_data.csv", row.names = FALSE)
+```
+
+```{r} 
+# percent families below poverty line
+belowPovertylevel_var <- "S1702_C02_001E"
+all_year_belowPovertylevel <- list()
+for (year in 2010:2019) {
+  S1702_table <- get_acs(
+      geography = "tract",
+      variables = belowPovertylevel_var,
+      year = year,
+      state = "CA",
+      county = "Los Angeles",
+      survey = "acs5",
+      output = "wide"
+    )
+  yearly_data <- left_join(LA_census_tracts, S1702_table, by = c("GEOID" = "GEOID"))
+  yearly_data <- yearly_data %>%
+    mutate(year = year) %>%
+    select(GEOID, year, S1702_C02_001E)
+  all_year_belowPovertylevel[[as.character(year)]] <- yearly_data
+  
+  map <- ggplot(data = yearly_data) +
+    geom_sf(aes(fill = S1702_C02_001E), color = NA) + 
+    scale_fill_viridis_c(
+      name = "Percent of Families Below Poverty Line",
+      na.value = "grey50",
+      limits = c(0, 100)  # 固定颜色范围为 0-1
+    ) +
+    labs(
+      title = paste("Percent of Families Below Poverty Line in Los Angeles City Census Tracts (", year, ")", sep = ""),
+      caption = "Data Source: ACS 5-year estimates"
+    ) +
+    theme_minimal()
+  plot(map)
+  ggsave(
+    filename = paste0("../Data/Demographic_Nov16/img/LA_Census_Tracts_lowerthanpovertyline_", year, ".png"),
+    plot = map,
+    width = 8,
+    height = 6
+  )
+ cat("Map for year", year, "saved as LA_Census_Tracts_lowerthanpovertyline_", year, ".png\n", sep = "")
+}
+combined_all_year_belowPovertylevel <- bind_rows(all_year_belowPovertylevel)
+combined_all_year_belowPovertylevel <- combined_all_year_belowPovertylevel %>% st_drop_geometry()
+
+yearly_belowPovertylevel_avg <- combined_all_year_belowPovertylevel %>%
+  group_by(year) %>%
+  summarize(avg_percLowerthanPoverty = mean(S1702_C02_001E, na.rm = TRUE))
+
+tract_lines <- ggplot() +
+  geom_line(data = combined_all_year_belowPovertylevel, aes(x = year, y = S1702_C02_001E, group = GEOID),
+            alpha = 0.1, color = "blue") +
+  geom_line(data = yearly_belowPovertylevel_avg, aes(x = year, y = avg_percLowerthanPoverty),
+            color = "red", linewidth = 1, linetype = "dashed") +
+  labs(
+    title = "Change in Percent of Families Below Poverty Line (2010-2019)",
+    x = "Year",
+    y = "Percent Families Below Poverty Line"
+  ) +
+  #scale_y_continuous(limits = c(0, 1)) +
+  #scale_x_continuous(
+  #  breaks = 2010:2019,  
+  #  labels = 2010:2019  
+  #) +
+  theme_minimal()
+print(tract_lines)
+
+```
+
+```{r}
+# mean and median income
+# percent families below poverty line
+Income_var <- c("S1901_C01_012E", "S1901_C01_013E")
+all_year_income <- list()
+for (year in 2010:2019) {
+  S1702_table <- get_acs(
+      geography = "tract",
+      variables = Income_var,
+      year = year,
+      state = "CA",
+      county = "Los Angeles",
+      survey = "acs5",
+      output = "wide"
+    )
+  yearly_data <- left_join(LA_census_tracts, S1702_table, by = c("GEOID" = "GEOID"))
+  yearly_data <- yearly_data %>%
+    mutate(year = year,
+           median_income = S1901_C01_012E,
+           mean_income = S1901_C01_013E) %>%
+    select(GEOID, year, median_income, mean_income)
+  all_year_income[[as.character(year)]] <- yearly_data
+  
+  Median_map <- ggplot(data = yearly_data) +
+    geom_sf(aes(fill = median_income), color = NA) + 
+    scale_fill_viridis_c(
+      name = "Household Median Income Line",
+      na.value = "grey50"#,
+      #limits = c(0, 100)  # 固定颜色范围为 0-1
+    ) +
+    labs(
+      title = paste("Household Median Income Line in Los Angeles City Census Tracts (", year, ")", sep = ""),
+      caption = "Data Source: ACS 5-year estimates"
+    ) +
+    theme_minimal()
+  plot(Median_map)
+  ggsave(
+    filename = paste0("../Data/Demographic_Nov16/img/LA_Census_Tracts_MedianIncome_", year, ".png"),
+    plot = Median_map,
+    width = 8,
+    height = 6
+  )
+  cat("Map for year", year, "saved as LA_Census_Tracts_MedianIncome_", year, ".png\n", sep = "")
+ 
+  Mean_map <- ggplot(data = yearly_data) +
+    geom_sf(aes(fill = mean_income), color = NA) + 
+    scale_fill_viridis_c(
+      name = "Household Mean Income Line",
+      na.value = "grey50"#,
+      #limits = c(0, 100)  # 固定颜色范围为 0-1
+    ) +
+    labs(
+      title = paste("Household Mean Income Line in Los Angeles City Census Tracts (", year, ")", sep = ""),
+      caption = "Data Source: ACS 5-year estimates"
+    ) +
+    theme_minimal()
+  plot(Mean_map)
+  ggsave(
+    filename = paste0("../Data/Demographic_Nov16/img/LA_Census_Tracts_MeanIncome_", year, ".png"),
+    plot = Mean_map,
+    width = 8,
+    height = 6
+  )
+ cat("Map for year", year, "saved as LA_Census_Tracts_MeanIncome_", year, ".png\n", sep = "")
+ 
+}
+combined_all_year_income <- bind_rows(all_year_income)
+combined_all_year_income <- combined_all_year_income %>% st_drop_geometry()
+
+yearly_income_avg <- combined_all_year_income %>%
+  group_by(year) %>%
+  summarize(
+    avg_mean_income = mean(mean_income, na.rm = TRUE),
+    avg_median_income = mean(median_income, na.rm = TRUE)
+  )
+
+mean_income_tract_lines <- ggplot() +
+  geom_line(data = combined_all_year_income, aes(x = year, y = mean_income, group = GEOID),
+            alpha = 0.1, color = "blue") +
+  geom_line(data = yearly_income_avg, aes(x = year, y = avg_mean_income),
+            color = "red", linewidth = 1, linetype = "dashed") +
+  labs(
+    title = "Change in Mean Income Line (2010-2019)",
+    x = "Year",
+    y = "Household Mean Income"
+  ) +
+  #scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(
+    breaks = 2010:2019,  
+    labels = 2010:2019  
+  ) +
+  theme_minimal()
+
+median_income_tract_lines <- ggplot() +
+  geom_line(data = combined_all_year_income, aes(x = year, y = median_income, group = GEOID),
+            alpha = 0.1, color = "blue") +
+  geom_line(data = yearly_income_avg, aes(x = year, y = avg_mean_income),
+            color = "red", linewidth = 1, linetype = "dashed") +
+  labs(
+    title = "Change in Median Income Line (2010-2019)",
+    x = "Year",
+    y = "Household Median Income"
+  ) +
+  #scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(
+    breaks = 2010:2019,  
+    labels = 2010:2019  
+  ) +
+  theme_minimal()
+print(mean_income_tract_lines)
+print(median_income_tract_lines)
+
+
+```
+```{r}
+# unempolyment rate
+# percent families below poverty line
+
+#2010 - 2012: DP03_0005PE
+#2013 - 2019: DP03_0009PE
+# 
+all_year_unemployment <- list()
+for (year in 2010:2019) {
+  
+  if (year >= 2010 && year <= 2012) {
+    unemployment_var <- "DP03_0005PE"
+    } else if (year >= 2013) {
+    unemployment_var <- "DP03_0009PE"
+    }
+  
+  DP03_table <- get_acs(
+      geography = "tract",
+      variables = unemployment_var,
+      year = year,
+      state = "CA",
+      county = "Los Angeles",
+      survey = "acs5",
+      output = "wide"
+    )
+  
+  yearly_data <- left_join(LA_census_tracts, DP03_table, by = c("GEOID" = "GEOID"))
+  yearly_data <- yearly_data %>%
+    mutate(
+      year = year,
+      unemployment_rate = !!sym(unemployment_var),
+      quintile = cut(
+        unemployment_rate,
+        breaks = quantile(unemployment_rate, probs = seq(0, 1, 0.2), na.rm = TRUE),
+        labels = c("Lowest", "Low", "Medium", "High", "Highest"),
+        include.lowest = TRUE
+      )
+    ) %>%
+    select(GEOID, year, unemployment_rate, quintile)
+  
+  all_year_unemployment[[as.character(year)]] <- yearly_data
+  
+  unemployment_map <- ggplot(data = yearly_data) +
+    geom_sf(aes(fill = quintile), color = NA) + 
+    scale_fill_viridis_d(
+      name = "Unemployment Rate Line",
+      na.value = "grey50"#,
+      #limits = c(0, 100)  # 固定颜色范围为 0-1 ############### continuous map
+    ) +
+    labs(
+      title = paste("Unemployment Rate Line in Los Angeles City Census Tracts (", year, ")", sep = ""),
+      caption = "Data Source: ACS 5-year estimates"
+    ) +
+    theme_minimal()
+  plot(unemployment_map)
+  ggsave(
+    filename = paste0("../Data/Demographic_Nov16/img/LA_Census_Tracts_unemployment_", year, ".png"),
+    plot = unemployment_map,
+    width = 8,
+    height = 6
+  )
+ cat("Map for year", year, "saved as LA_Census_Tracts_unemployment_", year, ".png\n", sep = "")
+}
+combined_all_year_unemployment <- bind_rows(all_year_unemployment)
+combined_all_year_unemployment <- combined_all_year_unemployment %>% st_drop_geometry()
+
+yearly_unemployment_avg <- combined_all_year_unemployment %>%
+  group_by(year) %>%
+  summarize(avg_unemployment = mean(unemployment_rate, na.rm = TRUE))
+
+tract_lines <- ggplot() +
+  geom_line(data = combined_all_year_unemployment, aes(x = year, y = unemployment_rate, group = GEOID),
+            alpha = 0.1, color = "blue") +
+  geom_line(data = yearly_unemployment_avg, aes(x = year, y = avg_unemployment),
+            color = "red", linewidth = 1, linetype = "dashed") +
+  labs(
+    title = "Change in Unemployment Rate Line (2010-2019)",
+    x = "Year",
+    y = "Unemployment Rate Line"
+  ) +
+  # scale_y_continuous(limits = c(0,100)) +
+  scale_x_continuous(
+    breaks = 2010:2019,  
+    labels = 2010:2019  
+  ) +
+  theme_minimal()
+print(tract_lines)
+
+
+```
