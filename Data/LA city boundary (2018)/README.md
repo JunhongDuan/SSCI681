@@ -2,6 +2,7 @@ The zip folder is the boundary of LA City
 
 If you need LA city census tract:
 run these codes in R: (**change to your file location**)
+CA census tract link: https://drive.google.com/file/d/1dnHwLH411Y5uL-N1DsGPeePlgTUxic-H/view?usp=drive_link
 
 ```{r}
 library(dplyr)
