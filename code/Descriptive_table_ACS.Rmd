@@ -1,0 +1,54 @@
+---
+title: "ACS descriptive table"
+author: "Junhong Duan"
+date: "2024-11-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+file_path <- "../Data/Demographic_Nov16/merged_data.csv"
+data <- read.csv(file_path)
+str(data)
+
+calculate_summary <- function(data, variable) {
+  data %>%
+    summarize(
+      mean = mean(.data[[variable]], na.rm = TRUE),
+      sd = sd(.data[[variable]], na.rm = TRUE),
+      min = min(.data[[variable]], na.rm = TRUE),
+      median = median(.data[[variable]], na.rm = TRUE),
+      max = max(.data[[variable]], na.rm = TRUE)
+    )
+}
+
+result <- data %>%
+  group_by(year) %>%
+  summarise(across(starts_with("var"), ~ list(calculate_summary(cur_data(), cur_column())))) %>%
+  unnest(cols = everything())
+
+result_long <- result %>%
+  pivot_longer(cols = starts_with("var"),
+               names_to = "variable",
+               values_to = "stats") %>%
+  unnest_wider(stats) %>%
+  pivot_longer(cols = c(mean, sd, min, median, max),
+               names_to = "statistic",
+               values_to = "value") %>%
+  pivot_wider(names_from = variable, values_from = value)
+
+print(result_long)
+
+write.csv(result_long, "summary_statistics.csv", row.names = FALSE)
+
+```
+
