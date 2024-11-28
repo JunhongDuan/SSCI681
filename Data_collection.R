@@ -46,13 +46,7 @@ proj_crs <- as.numeric(suggest_crs(crime_data)$crs_code[1])
 la_crime <- crime_data %>%
   tidyr::separate(date_single, c("date", "time"), sep = " ", remove = TRUE) %>%
   st_transform(crs=proj_crs) %>%
-  mutate(year = year(date)) 
-
-
-# aggregate crime data to census block then tract level 
-la_crime_ag <- la_crime %>%
-  group_by(year, offense_against, offense_group, offense_type, census_block) %>%
-  summarise(n = n()) 
+  mutate(year = year(date))
 
 
 # la geographic data for one year, TODO: make table of all years
@@ -94,4 +88,19 @@ crime_tract_ag_type <- crime_tract %>%
   st_as_sf()
 
 
+# merge crime data for model 
+merged_data <- read.csv("./Data/merged_data.csv") %>%
+  mutate(year = as.numeric(year))
+
+
+merged_data_crime <- crime_tract %>%
+  st_drop_geometry() %>%
+  select(GEOID, year, date, offense_against) %>%
+  mutate(month=month(floor_date(as.Date(date), unit="month")), day=day(floor_date(as.Date(date), unit="day")), GEOID = as.numeric(GEOID)) %>% 
+  group_by(GEOID, year, month, day, offense_against) %>%
+  summarize(n=n()) %>%
+  merge(merged_data, by=c("GEOID", "year"), all.x=T)
+
+
+write.csv(merged_data_crime, "./Data/merged_data_crime.csv", row.names=F)
 

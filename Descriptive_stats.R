@@ -11,13 +11,15 @@ library(kableExtra)
 library(tmap)
 ### HEAT DATA TABLES 
 
+offense_against <- unique(la_crime$offense_against)
+
 # total crime count
-crime_count <- la_crime %>%
+crime <- la_crime %>%
   st_drop_geometry() %>%
   group_by(year, offense_against, offense_group, offense_type) 
 
 # generate table 1-2
-crime_count %>% tabyl(offense_group, year) %>%
+crime %>% tabyl(offense_group, year) %>%
   adorn_totals(where = "row") %>%
   adorn_totals(where = "col") %>%
   adorn_percentages(denominator = "col") %>%  # convert to proportions
@@ -25,15 +27,43 @@ crime_count %>% tabyl(offense_group, year) %>%
   adorn_ns(position = "front") %>% 
   knitr::kable() %>%
   kable_styling("basic")
+
+crime_count_type <- la_crime %>%
+  group_by(month=floor_date(as.Date(date), unit="month"), offense_against, offense_group, offense_type) %>%
+  summarize(n=n()) 
   
-crime_count %>% 
-  ggplot(aes(x=year, y=n, fill=offense_group)) +
-  geom_bar(stat="identity") +
-  facet_wrap(~offense_group) +
-  theme(axis.text.x = element_text(size=6, angle = 90, 
-                                   vjust = 0.5, 
-                                   hjust=1, 
-                                   lineheight=0.75))
+crime_count_offense_against <- crime %>%
+  group_by(year, offense_against) %>%
+  summarize(n=n())
+
+# line graph of crime over time 
+
+crime_count_offense_against %>% 
+  ggplot(aes(x=as.Date(as.character(year), format="%Y-%M"), y=n, color=offense_against)) +
+  geom_point() +
+  geom_line() +
+  scale_x_date(date_breaks = "year", date_labels = "%Y") +
+  theme(axis.text.x.top = element_text(vjust = 0.5))
+  #facet_wrap(~offense_group)
+
+for(offense in offense_against) { 
+  print(offense)
+  
+  print(crime_count_type %>%
+          filter(offense_against == offense) %>%
+          ggplot(aes(x=month, y=n, color=offense_type, group=offense_type)) +
+          geom_point() +
+          geom_line() + 
+          # scale_fill_viridis(discrete = TRUE, alpha=0.6, option="A") +
+          theme(
+            plot.title = element_text(size=11), 
+            axis.text.x = element_text(size=9, angle = 90, 
+                                       vjust = 0.5, 
+                                       hjust=1, 
+                                       lineheight=0.75)) +
+          scale_x_date(NULL, date_labels = "%b %y",breaks="month") +
+          ggtitle(offense))
+}
 
 crime_tract_2019 <- crime_tract_ag %>% filter(year==2019)
 
@@ -75,7 +105,6 @@ crime_catg_desc_data <- crime_tract_ag_type %>%
   ) %>% 
   st_drop_geometry()
 
-offense_against <- unique(crime_catg_desc_data$offense_against)
 
 for(offense in offense_against) { 
   print(offense)
@@ -92,7 +121,6 @@ for(offense in offense_against) {
                                  hjust=1, 
                                  lineheight=0.75)) +
     ggtitle(offense))
-  
 }
 
 crime_tract_ag_type %>%
@@ -132,8 +160,6 @@ ggplot(crime_year %>% filter(year == 2019), aes(x=date, y=n, alpha=.5)) +
 
 
 # plot crime by time
-
-
 ggplot(crime_year %>% filter(year == 2019), aes(x=time, y=n, alpha=.5)) +
   geom_point(aes(colour=offense_against)) +
   theme(axis.text.x = element_text(size=6, angle = 90, 
