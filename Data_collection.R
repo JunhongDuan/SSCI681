@@ -92,6 +92,36 @@ crime_tract_ag_type <- crime_tract %>%
 merged_data <- read.csv("./Data/merged_data.csv") %>%
   mutate(year = as.numeric(year))
 
+# create a key of complete GEOID, day, month, and year values
+generate_date_combinations <- function(geoid, year) {
+  # Create a data frame with all months
+  month_days <- data.frame(
+    month = 1:12,
+    days_in_month = sapply(1:12, function(m) {
+      as.integer(format(as.Date(paste(year, m + 1, "01", sep = "-")) - 1, "%d"))
+    })
+  )
+  
+  # Expand to include days
+  month_days_expanded <- month_days %>%
+    rowwise() %>%
+    mutate(day = list(1:days_in_month)) %>%
+    unnest(day)
+  
+  # Add GEOID and year to the dataset
+  month_days_expanded <- month_days_expanded %>%
+    mutate(GEOID = geoid, year = year) %>%
+    select(GEOID, year, month, day)
+  
+  return(month_days_expanded)
+}
+
+date_key <- crime_tract %>%
+  select(GEOID, YEAR) %>%
+  unique() %>%
+  rowwise() %>%
+  do(generate_date_combinations(.$GEOID, .$year)) %>%
+  ungroup()
 
 merged_data_crime <- crime_tract %>%
   st_drop_geometry() %>%
@@ -99,7 +129,10 @@ merged_data_crime <- crime_tract %>%
   mutate(month=month(floor_date(as.Date(date), unit="month")), day=day(floor_date(as.Date(date), unit="day")), GEOID = as.numeric(GEOID)) %>% 
   group_by(GEOID, year, month, day, offense_against) %>%
   summarize(n=n()) %>%
-  merge(merged_data, by=c("GEOID", "year"), all.x=T)
+  # merge key
+  merge(merged_data, by=c("GEOID", "year"), all.x=T, all.y=T) #%>%
+  # filter(!is.na(year)) %>%
+  # mutate(n=ifelse(is.na(n), 0, n)) 
 
 
 write.csv(merged_data_crime, "./Data/merged_data_crime.csv", row.names=F)

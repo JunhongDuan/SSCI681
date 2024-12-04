@@ -18,7 +18,17 @@ crime <- la_crime %>%
   st_drop_geometry() %>%
   group_by(year, offense_against, offense_group, offense_type) 
 
-# generate table 1-2
+# generate table 1
+
+merged_data_crime %>% 
+  # filter(offense_against=="persons") %>%
+  # filter(offense_against=="property") %>%
+  #filter(offense_against=="society") %>%
+  group_by(GEOID) %>%
+  summarize(n=sum(n)) %>%
+  summarize(count=n(), mean=mean(n), median=median(n), sd=sd(n), min=min(n), max=max(n)) %>%
+
+
 crime %>% tabyl(offense_group, year) %>%
   adorn_totals(where = "row") %>%
   adorn_totals(where = "col") %>%
